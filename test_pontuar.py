@@ -1,8 +1,8 @@
 """Check da heuristica pontuar() do vosk_global."""
 import os
 src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "vosk_global.py"), encoding="utf-8").read()
-ns = {"__file__": os.path.join(os.path.dirname(os.path.abspath(__file__)), "vosk_global.py")}
-exec(src[:src.index('print("modelo:"')], ns)
+ns = {}
+exec(src[src.index("# ponytail: heuristica"):src.index('print("modelo:"')], ns)
 pontuar = ns["pontuar"]
 casos = {
     "quem vai na reunião amanhã": "Quem vai na reunião amanhã?",
