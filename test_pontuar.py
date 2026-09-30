@@ -2,7 +2,7 @@
 import os
 src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "vosk_global.py"), encoding="utf-8").read()
 ns = {}
-exec(src[src.index("# ponytail: heuristica"):src.index('print("modelo:"')], ns)
+exec(src[src.index("# ponytail: heuristica"):src.index("# ---------- motor")], ns)
 pontuar = ns["pontuar"]
 casos = {
     "quem vai na reunião amanhã": "Quem vai na reunião amanhã?",
