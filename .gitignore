@@ -1,3 +1,6 @@
 models/
 __pycache__/
 *.wav
+reunioes/
+.env
+teste.py

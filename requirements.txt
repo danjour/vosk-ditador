@@ -1,3 +1,14 @@
-vosk
+vosk           # só p/ vosk_live.py (teste de console); o ditador usa faster-whisper
 sounddevice
 keyboard
+pillow
+faster-whisper
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
+numpy
+requests
+soundfile      # le/grava FLAC do modo reunião
+soxr           # resample (mic 44.1k/16k de BT -> 48k do FLAC)
+PyAudioWPatch  # loopback WASAPI do áudio do sistema (reuniao.py)
+python-dotenv  # chaves/config no .env (veja .env.example)
+pyannote.audio==4.0.7  # só p/ --diarizar; antes dela: pip install torch==2.14.1 torchvision==0.29.1 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu130 (torch do PyPI não tem kernel da RTX 5050)
