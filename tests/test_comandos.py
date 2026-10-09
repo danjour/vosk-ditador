@@ -174,5 +174,56 @@ class TestTratar(unittest.TestCase):
         self.assertNotIn("custo", msg)
 
 
+class TestTocar(unittest.TestCase):
+    def test_yt_id_primeira_linha(self):
+        with mock.patch.object(comandos, "_yt_run", return_value="abc123\ndef456\n"):
+            self.assertEqual(comandos._yt_id("queen"), "abc123")
+
+    def test_yt_id_falha_e_none(self):
+        with mock.patch.object(comandos, "_yt_run", side_effect=RuntimeError("rede")):
+            self.assertIsNone(comandos._yt_id("queen"))
+
+    def test_tocar_dispara_mpv(self):
+        with mock.patch.object(comandos, "_yt_id", return_value="abc123"):
+            with mock.patch.object(comandos, "_mpv_ensure", return_value=True) as e:
+                with mock.patch.object(comandos, "_mpv_send") as s:
+                    msg = comandos.tocar("queen")
+        e.assert_called_once_with()
+        s.assert_called_once()
+        self.assertIn("queen", msg.lower())
+        self.assertEqual(s.call_args.args[0], {"command": ["loadfile",
+            "https://www.youtube.com/watch?v=abc123", "append-play"]})
+
+    def test_tocar_sem_id_abre_busca(self):
+        with mock.patch.object(comandos, "_yt_id", return_value=None):
+            with mock.patch.object(comandos, "_abrir_url") as u:
+                msg = comandos.tocar("queen")
+        u.assert_called_once()
+        self.assertIn("search_query=queen", u.call_args.args[0])
+        self.assertIn("busca", msg.lower())
+
+    def test_pause_vai_pro_ipc_quando_mpv_vivo(self):
+        mpv = mock.Mock()
+        mpv.poll.return_value = None
+        with mock.patch.object(comandos, "_MPV", mpv):
+            with mock.patch.object(comandos, "_mpv_send") as s:
+                with mock.patch.object(comandos, "_teclado") as t:
+                    comandos.executar("pausar_musica")
+        s.assert_called_once_with({"command": ["cycle", "pause"]})
+        t.assert_not_called()
+
+    def test_pause_cai_pra_media_key_sem_mpv(self):
+        with mock.patch.object(comandos, "_MPV", None):
+            with mock.patch.object(comandos, "_mpv_send") as s:
+                with mock.patch.object(comandos, "_teclado") as t:
+                    comandos.executar("pausar_musica")
+        s.assert_not_called()
+        t.assert_called_once_with("play/pause media")
+
+    def test_match_local_toca(self):
+        self.assertEqual(comandos.match_local("toca bohemian rhapsody"), "tocar_musica")
+        self.assertEqual(comandos.match_local("quero ouvir queen"), "tocar_musica")
+
+
 if __name__ == "__main__":
     unittest.main()

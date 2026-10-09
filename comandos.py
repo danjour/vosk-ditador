@@ -26,7 +26,11 @@ ABRIR = {
     "abrir_github": "https://github.com",
 }
 
-COMANDOS = set(MIDIA) | set(ABRIR) | {"ditado"}
+COMANDOS = set(MIDIA) | set(ABRIR) | {"tocar_musica", "ditado"}
+
+
+MPV_PIPE = r"\\.\pipe\mpv-ditador"
+_MPV = None  # Popen do demônio mpv (seam de módulo p/ testes)
 
 
 def normaliza(texto):
@@ -67,6 +71,11 @@ def match_local(frase):
         return "volume_menos"
     if any(k in n for k in ("mudo", "mutar", "sem som", "silenciar")):
         return "volume_mudo"
+    n2 = normaliza(frase)
+    if n2.startswith(("toca ", "tocar ", "ouve ", "ouvir ", "ponha ",
+                      "poe ", "bota pra tocar ", "quero ouvir ",
+                      "quero escutar ")):
+        return "tocar_musica"
     return None
 
 
@@ -79,16 +88,108 @@ def _abrir_url(url):
     webbrowser.open(url)
 
 
-def executar(comando):
+def executar(comando, argumento=""):
     """Executa um id de COMANDOS; devolve mensagem p/ a bandeja."""
     if comando in MIDIA:
+        if _mpv_vivo():
+            try:
+                _mpv_send({"command": ["cycle", "pause"]}
+                          if comando in ("pausar_musica", "continuar_musica")
+                          else {"command": ["playlist-next"]}
+                          if comando == "proxima_faixa"
+                          else {"command": ["playlist-prev"]})
+                return MIDIA[comando][1]
+            except Exception:
+                pass
         tecla, msg = MIDIA[comando]
         _teclado(tecla)
         return msg
+    if comando == "tocar_musica":
+        return tocar(argumento)
     if comando in ABRIR:
         _abrir_url(ABRIR[comando])
         return f"{comando[6:].capitalize()} aberto"
     raise ValueError(f"comando desconhecido: {comando}")
+
+
+def _yt_run(args, timeout=15):
+    """Roda yt-dlp e devolve stdout; qualquer falha levanta."""
+    import subprocess
+    return subprocess.run(args, capture_output=True, text=True,
+                          timeout=timeout, check=True).stdout
+
+
+def _yt_id(consulta):
+    """Primeiro ID de `ytsearch1` (keyless) ou None."""
+    try:
+        for linha in _yt_run(["yt-dlp", f"ytsearch1:{consulta}",
+                              "--flat-playlist", "--print", "id",
+                              "--no-warnings"]).splitlines():
+            if linha.strip():
+                return linha.strip()
+    except Exception:
+        pass
+    return None
+
+
+def _mpv_vivo():
+    return _MPV is not None and _MPV.poll() is None
+
+
+def _mpv_spawn():
+    """Sobe o demônio mpv (áudio, idle, IPC). Devolve Popen."""
+    import subprocess
+    return subprocess.Popen(
+        ["mpv", "--no-video", "--idle=yes", f"--input-ipc-server={MPV_PIPE}"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+
+
+def _mpv_ensure():
+    """Garante o demônio de pé; True se pronto."""
+    global _MPV
+    try:
+        if not _mpv_vivo():
+            _MPV = _mpv_spawn()
+        return _mpv_vivo()
+    except Exception:
+        return False
+
+
+def _mpv_send(obj):
+    """Um comando JSON ao IPC (seam mockável; exceção escapa p/ o chamador)."""
+    import json
+    with open(MPV_PIPE, "r+b", buffering=0) as pipe:
+        pipe.write((json.dumps(obj) + "\n").encode())
+        pipe.readline()
+
+
+def _limpa_consulta(resto):
+    """Tira verbo líder ('toca X'→'X'); sem verbo, o resto inteiro."""
+    n = normaliza(resto)
+    for verbo in ("toca ", "tocar ", "ouve ", "ouvir ", "ponha ", "poe ",
+                  "bota pra tocar ", "quero ouvir ", "quero escutar "):
+        if n.startswith(verbo):
+            return n[len(verbo):].strip() or n
+    return resto.strip()
+
+
+def tocar(consulta):
+    """Toca o 1º resultado no mpv; sem ID, abre a busca (fail-open)."""
+    import urllib.parse
+    consulta = _limpa_consulta(consulta)
+    vid = _yt_id(consulta)
+    if vid and _mpv_ensure():
+        try:
+            _mpv_send({"command": ["loadfile",
+                                   f"https://www.youtube.com/watch?v={vid}",
+                                   "append-play"]})
+            return f"Tocando {consulta}"
+        except Exception:
+            pass
+    _abrir_url("https://www.youtube.com/results?search_query=" +
+               urllib.parse.quote_plus(consulta))
+    return f"Busca aberta: {consulta}"
 
 
 JEV_URL = "https://openrouter.ai/api/alpha/decisions"
@@ -181,7 +282,7 @@ def tratar(texto):
     if cmd is None or cmd == "ditado":
         return (False, resto)
     try:
-        msg = executar(cmd)
+        msg = executar(cmd, resto)
     except Exception:  # ponytail: fail-open total; nada pode matar o bombeia
         return (False, resto)
     if custo is not None:
