@@ -38,10 +38,14 @@ def normaliza(texto):
 
 
 def tira_wake(texto, wake=WAKE_PADRAO):
-    """Devolve o resto após 'wake,' / 'wake ' (case-insensitive) ou None."""
+    """Devolve o resto após 'wake,' / 'wake ' (case-insensitive) ou None.
+    Exige fronteira de palavra: 'computadores' não dispara."""
     t = (texto or "").strip()
     if t.casefold().startswith(wake.casefold()):
-        resto = t[len(wake):].lstrip(" \t,:")
+        resto = t[len(wake):]
+        if resto and resto[0] not in " \t,:":
+            return None
+        resto = resto.lstrip(" \t,:")
         return resto or None
     return None
 
@@ -104,9 +108,12 @@ def limiar():
     return min(1.0, max(0.0, v))
 
 
-def decidir(frase, chave, timeout=20):
+def decidir(frase, chave, timeout=8):
     """Pergunta ao JEV qual comando a frase é (+ditado). Falha → None."""
-    import requests
+    try:
+        import requests
+    except ImportError:
+        return None
     pergunta = {"intencao": {
         "type": "choice",
         "instructions": "A frase e um comando de voz ou ditado normal?",
@@ -144,7 +151,10 @@ def decidir(frase, chave, timeout=20):
         cmd, conf = a.get("choice"), a.get("confidence", 0.0)
         if cmd not in COMANDOS or not isinstance(conf, (int, float)):
             return None
-        return (cmd, float(conf), (js.get("usage") or {}).get("cost"))
+        custo = (js.get("usage") or {}).get("cost")
+        if custo is not None and not isinstance(custo, (int, float)):
+            custo = None
+        return (cmd, float(conf), custo)
     except (ValueError, KeyError, TypeError, AttributeError):
         return None
 
@@ -172,7 +182,7 @@ def tratar(texto):
         return (False, resto)
     try:
         msg = executar(cmd)
-    except ValueError:
+    except Exception:  # ponytail: fail-open total; nada pode matar o bombeia
         return (False, resto)
     if custo is not None:
         msg += f" (custo ${custo:.5f})"

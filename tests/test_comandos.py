@@ -18,6 +18,11 @@ class TestWake(unittest.TestCase):
     def test_wake_customizado(self):
         self.assertEqual(comandos.tira_wake("Jarvis, próxima.", wake="jarvis"), "próxima.")
 
+    def test_wake_exige_fronteira(self):
+        self.assertIsNone(comandos.tira_wake("Computadores são caros."))
+        self.assertIsNone(comandos.tira_wake("Computador."))
+        self.assertEqual(comandos.tira_wake("Computador: pausar."), "pausar.")
+
 
 class TestMatchLocal(unittest.TestCase):
     def test_variacoes_pausar(self):
@@ -74,6 +79,7 @@ class TestDecidir(unittest.TestCase):
         corpo = p.call_args.kwargs["json"]
         self.assertEqual(corpo["model"], "typesafe/jev-1.13")
         self.assertIn("ditado", corpo["questions"]["intencao"]["criteria"])
+        self.assertEqual(p.call_args.kwargs["timeout"], 8)
 
     def test_rede_fora_devolve_none(self):
         with mock.patch("requests.post", side_effect=requests.RequestException("dns")):
@@ -107,8 +113,10 @@ class TestDecidir(unittest.TestCase):
 class TestTratar(unittest.TestCase):
     def test_local_executa_sem_rede(self):
         with mock.patch("requests.post") as p:
-            ok, msg = comandos.tratar("Computador, pausar música.")
+            with mock.patch.object(comandos, "_teclado") as t:
+                ok, msg = comandos.tratar("Computador, pausar música.")
         p.assert_not_called()
+        t.assert_called_once_with("play/pause media")
         self.assertTrue(ok)
         self.assertIn("paus", msg.lower())
 
@@ -118,10 +126,12 @@ class TestTratar(unittest.TestCase):
         r.json.return_value = {"answers": ans, "usage": {"cost": 0.00001}}
         with mock.patch("requests.post", return_value=r):
             with mock.patch.dict("os.environ", {"OPENROUTER_API_KEY": "k"}):
-                ok, msg = comandos.tratar("Computador, abre o youtube.")
+                with mock.patch.object(comandos, "_abrir_url") as u:
+                    ok, msg = comandos.tratar("Computador, abre o youtube.")
         self.assertTrue(ok)
         self.assertIn("Youtube", msg)
         self.assertIn("custo", msg)
+        u.assert_called_once_with("https://www.youtube.com")
 
     def test_confianca_baixa_vira_ditado(self):
         ans = {"intencao": {"type": "choice", "choice": "abrir_youtube", "confidence": 0.4}}
@@ -146,6 +156,22 @@ class TestTratar(unittest.TestCase):
                 ok, texto = comandos.tratar("Computador, que horas são?")
         p.assert_not_called()
         self.assertEqual((ok, texto), (False, "que horas são?"))
+
+    def test_erro_no_teclado_vira_ditado(self):
+        with mock.patch.object(comandos, "_teclado", side_effect=RuntimeError("tecla")):
+            ok, texto = comandos.tratar("Computador, pausar música.")
+        self.assertEqual((ok, texto), (False, "pausar música."))
+
+    def test_custo_invalido_nao_quebra(self):
+        ans = {"intencao": {"type": "choice", "choice": "abrir_youtube", "confidence": 0.9}}
+        r = mock.Mock(status_code=200)
+        r.json.return_value = {"answers": ans, "usage": {"cost": "gratis"}}
+        with mock.patch("requests.post", return_value=r):
+            with mock.patch.dict("os.environ", {"OPENROUTER_API_KEY": "k"}):
+                with mock.patch.object(comandos, "_abrir_url"):
+                    ok, msg = comandos.tratar("Computador, abre o youtube.")
+        self.assertTrue(ok)
+        self.assertNotIn("custo", msg)
 
 
 if __name__ == "__main__":
