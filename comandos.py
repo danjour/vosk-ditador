@@ -75,17 +75,33 @@ def normaliza(texto):
     return t
 
 
+_BORDA = " \t,;:!?.…"
+
+
 def tira_wake(texto, wake=WAKE_PADRAO):
     """Devolve o resto após 'wake,' / 'wake ' (case-insensitive) ou None.
     Exige fronteira de palavra: 'computadores' não dispara."""
     t = (texto or "").strip()
     if t.casefold().startswith(wake.casefold()):
         resto = t[len(wake):]
-        if resto and resto[0] not in " \t,:":
+        if resto and resto[0] not in _BORDA:
             return None
-        resto = resto.lstrip(" \t,:")
+        resto = resto.lstrip(_BORDA)
         return resto or None
     return None
+
+
+def acha_wake(texto, wake=WAKE_PADRAO):
+    """Resto após o wake em qualquer posição (fronteiras de palavra) ou None.
+    Cobre 'ô computador, ...' e frases grudadas do VAD sem mutilar o ditado:
+    quem usa o resto decide; sem match, o texto original segue intacto."""
+    import re
+    m = re.search(rf"(?<!\w){re.escape(wake)}(?=[{_BORDA}]|$)", (texto or ""),
+                  flags=re.IGNORECASE)
+    if not m:
+        return None
+    resto = texto[m.end():].lstrip(_BORDA)
+    return resto or None
 
 
 def match_local(frase):
@@ -329,10 +345,17 @@ def wake():
 
 def tratar(texto):
     """Cascata wake → local → JEV. (True, status) executou;
-    (False, texto) segue p/ ditado (wake removido se havia)."""
+    (False, texto) segue p/ ditado (wake removido se havia).
+    Segunda chance conservadora: wake no meio + keyword local clara executa;
+    sem ela, o ORIGINAL segue intacto (JEV nunca decide no meio da frase)."""
     resto = tira_wake(texto, wake())
     if resto is None:
-        return (False, texto)
+        meio = acha_wake(texto, wake())
+        if meio is None:
+            return (False, texto)
+        if match_local(meio) is None:
+            return (False, texto)
+        resto = meio
     cmd, custo = match_local(resto), None
     if cmd is None:
         chave = os.environ.get("OPENROUTER_API_KEY", "").strip()

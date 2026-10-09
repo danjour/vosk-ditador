@@ -22,6 +22,27 @@ class TestWake(unittest.TestCase):
         self.assertIsNone(comandos.tira_wake("Computadores são caros."))
         self.assertIsNone(comandos.tira_wake("Computador."))
         self.assertEqual(comandos.tira_wake("Computador: pausar."), "pausar.")
+        self.assertEqual(comandos.tira_wake("Computador! Pausar música."), "Pausar música.")
+
+    def test_wake_no_meio_so_com_comando_claro(self):
+        with mock.patch.object(comandos, "_teclado") as t:
+            ok, msg = comandos.tratar("Ô computador, pausar música.")
+        self.assertTrue(ok)
+        t.assert_called_once_with("play/pause media")
+
+    def test_prosa_com_computador_intacta(self):
+        texto = "Meu computador quebrou a tela."
+        with mock.patch("requests.post") as p:
+            ok, saida = comandos.tratar(texto)
+        p.assert_not_called()
+        self.assertEqual((ok, saida), (False, texto))
+
+    def test_wake_sozinho_vira_ditado(self):
+        texto = "Falei com o computador ontem."
+        with mock.patch("requests.post") as p:
+            ok, saida = comandos.tratar(texto)
+        p.assert_not_called()
+        self.assertEqual((ok, saida), (False, texto))
 
 
 class TestMatchLocal(unittest.TestCase):
