@@ -41,8 +41,8 @@ class TestMatchLocal(unittest.TestCase):
         self.assertEqual(comandos.match_local("deixar mudo"), "volume_mudo")
 
     def test_fora_do_mapa_local_e_none(self):
-        self.assertIsNone(comandos.match_local("abrir o youtube"))
-        self.assertIsNone(comandos.match_local("que horas são"))
+        self.assertIsNone(comandos.match_local("abrir o banco"))
+        self.assertIsNone(comandos.match_local("que dia é hoje"))
 
 
 class TestExecutar(unittest.TestCase):
@@ -127,7 +127,7 @@ class TestTratar(unittest.TestCase):
         with mock.patch("requests.post", return_value=r):
             with mock.patch.dict("os.environ", {"OPENROUTER_API_KEY": "k"}):
                 with mock.patch.object(comandos, "_abrir_url") as u:
-                    ok, msg = comandos.tratar("Computador, abre o youtube.")
+                    ok, msg = comandos.tratar("Computador, por favor acesse o youtube.")
         self.assertTrue(ok)
         self.assertIn("Youtube", msg)
         self.assertIn("custo", msg)
@@ -139,7 +139,7 @@ class TestTratar(unittest.TestCase):
         r.json.return_value = {"answers": ans, "usage": {"cost": 0.0}}
         with mock.patch("requests.post", return_value=r):
             with mock.patch.dict("os.environ", {"OPENROUTER_API_KEY": "k"}):
-                ok, texto = comandos.tratar("Computador, abre o youtube.")
+                ok, texto = comandos.tratar("Computador, por favor acesse o youtube.")
         self.assertFalse(ok)
         self.assertNotIn("omputador", texto.lower())
 
@@ -153,9 +153,9 @@ class TestTratar(unittest.TestCase):
         env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
         with mock.patch.dict("os.environ", env, clear=True):
             with mock.patch("requests.post") as p:
-                ok, texto = comandos.tratar("Computador, que horas são?")
+                ok, texto = comandos.tratar("Computador, qual é a capital da França?")
         p.assert_not_called()
-        self.assertEqual((ok, texto), (False, "que horas são?"))
+        self.assertEqual((ok, texto), (False, "qual é a capital da França?"))
 
     def test_erro_no_teclado_vira_ditado(self):
         with mock.patch.object(comandos, "_teclado", side_effect=RuntimeError("tecla")):
@@ -245,6 +245,37 @@ class TestFalar(unittest.TestCase):
     def test_sintese_falhando_nao_levanta(self):
         with mock.patch.object(comandos, "_sintetizar", side_effect=RuntimeError("rede")):
             comandos._falar_sync("oi")  # sem exceção = passou
+
+
+class TestV2Extra(unittest.TestCase):
+    def test_abrir_programa(self):
+        with mock.patch.object(comandos, "_abrir_app") as a:
+            msg = comandos.executar("abrir_programa", "a calculadora")
+        a.assert_called_once_with("calc")
+        self.assertIn("calculadora", msg.lower())
+
+    def test_abrir_desconhecido_levanta(self):
+        with self.assertRaises(ValueError):
+            comandos.executar("abrir_programa", "o banco")
+
+    def test_horas(self):
+        msg = comandos.executar("dizer_horas")
+        self.assertRegex(msg, r"São \d{1,2}h\d{2}")
+
+    def test_pesquisar(self):
+        with mock.patch.object(comandos, "_abrir_url") as u:
+            comandos.executar("pesquisar_web", "bolo de cenoura")
+        self.assertIn("bolo+de+cenoura", u.call_args.args[0])
+
+    def test_match_abrir_local(self):
+        self.assertEqual(comandos.match_local("abre o youtube"), "abrir_youtube")
+        self.assertEqual(comandos.match_local("abrir a calculadora"), "abrir_programa")
+        self.assertEqual(comandos.match_local("que horas são"), "dizer_horas")
+        self.assertEqual(comandos.match_local("pesquisa bolo de cenoura"), "pesquisar_web")
+
+    def test_tratar_abrir_fora_do_mapa_vira_ditado(self):
+        ok, texto = comandos.tratar("Computador, abre o banco.")
+        self.assertEqual((ok, texto), (False, "abre o banco."))
 
 
 if __name__ == "__main__":

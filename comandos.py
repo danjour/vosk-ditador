@@ -26,7 +26,41 @@ ABRIR = {
     "abrir_github": "https://github.com",
 }
 
-COMANDOS = set(MIDIA) | set(ABRIR) | {"tocar_musica", "ditado"}
+APPS = {
+    "bloco de notas": "notepad",
+    "calculadora": "calc",
+    "paint": "mspaint",
+    "explorador": "explorer",
+}
+
+_NOMES_SITES = {"youtube": "abrir_youtube", "gmail": "abrir_gmail",
+                "whatsapp": "abrir_whatsapp", "github": "abrir_github"}
+
+COMANDOS = (set(MIDIA) | set(ABRIR) | {"abrir_programa", "tocar_musica",
+                                       "dizer_horas", "pesquisar_web", "ditado"})
+
+
+def _tira_artigo(nome):
+    n = normaliza(nome)
+    for art in ("o ", "a ", "os ", "as ", "um ", "uma "):
+        if n.startswith(art):
+            return n[len(art):]
+    return n
+
+
+def _resolve_abrir(nome):
+    nome = _tira_artigo(nome)
+    for pedaco, cid in _NOMES_SITES.items():
+        if pedaco in nome:
+            return cid
+    if nome in APPS:
+        return "abrir_programa"
+    return None
+
+
+def _abrir_app(executavel):
+    import os as _os
+    _os.startfile(executavel)
 
 
 MPV_PIPE = r"\\.\pipe\mpv-ditador"
@@ -76,6 +110,12 @@ def match_local(frase):
                       "poe ", "bota pra tocar ", "quero ouvir ",
                       "quero escutar ")):
         return "tocar_musica"
+    if n2.startswith(("que horas", "que hora e", "me diz as horas", "diga as horas")):
+        return "dizer_horas"
+    if n2.startswith(("pesquisa ", "pesquisar ", "busca ", "buscar ", "procura por ")):
+        return "pesquisar_web"
+    if n2.startswith(("abre ", "abrir ", "abra ")):
+        return _resolve_abrir(n2.split(" ", 1)[1])  # None cai adiante
     return None
 
 
@@ -109,6 +149,23 @@ def executar(comando, argumento=""):
     if comando in ABRIR:
         _abrir_url(ABRIR[comando])
         return f"{comando[6:].capitalize()} aberto"
+    if comando == "abrir_programa":
+        nome = _tira_artigo(argumento)
+        if nome not in APPS:
+            raise ValueError(f"programa desconhecido: {argumento}")
+        _abrir_app(APPS[nome])
+        return f"{nome.capitalize()} aberto"
+    if comando == "dizer_horas":
+        import datetime
+        agora = datetime.datetime.now()
+        return f"São {agora.hour}h{agora.minute:02d}"
+    if comando == "pesquisar_web":
+        import urllib.parse
+        q = (argumento or "").strip(" \t\n.,;:!?")
+        if not q:
+            raise ValueError("pesquisa vazia")
+        _abrir_url("https://www.google.com/search?q=" + urllib.parse.quote_plus(q))
+        return f"Pesquisando {q}"
     raise ValueError(f"comando desconhecido: {comando}")
 
 
@@ -230,6 +287,10 @@ def decidir(frase, chave, timeout=8):
             "abrir_gmail": "Abrir o Gmail.",
             "abrir_whatsapp": "Abrir o WhatsApp Web.",
             "abrir_github": "Abrir o GitHub.",
+            "abrir_programa": "Abrir um programa do computador.",
+            "tocar_musica": "Tocar uma música/áudio do YouTube.",
+            "dizer_horas": "Dizer que horas são.",
+            "pesquisar_web": "Pesquisar algo na web.",
             "ditado": "Texto comum para digitar, nao e comando.",
         }}}
     try:
