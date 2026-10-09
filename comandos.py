@@ -85,3 +85,65 @@ def executar(comando):
         _abrir_url(ABRIR[comando])
         return f"{comando[6:].capitalize()} aberto"
     raise ValueError(f"comando desconhecido: {comando}")
+
+
+JEV_URL = "https://openrouter.ai/api/alpha/decisions"
+
+
+def _env_modelo():
+    m = os.environ.get("JEV_MODEL", "typesafe/jev-1.13").strip()
+    return m or "typesafe/jev-1.13"
+
+
+def limiar():
+    """Confiança mínima p/ executar (env COMANDO_CONFIANCA, padrão 0.6)."""
+    try:
+        v = float(os.environ.get("COMANDO_CONFIANCA", str(LIMIAR_PADRAO)))
+    except (TypeError, ValueError):
+        return LIMIAR_PADRAO
+    return min(1.0, max(0.0, v))
+
+
+def decidir(frase, chave, timeout=20):
+    """Pergunta ao JEV qual comando a frase é (+ditado). Falha → None."""
+    import requests
+    pergunta = {"intencao": {
+        "type": "choice",
+        "instructions": "A frase e um comando de voz ou ditado normal?",
+        "criteria": {
+            "pausar_musica": "Pausar, parar ou continuar musica/audio.",
+            "continuar_musica": "Retomar a reproducao de musica/audio.",
+            "proxima_faixa": "Pular para a proxima faixa/musica.",
+            "faixa_anterior": "Voltar para a faixa/musica anterior.",
+            "volume_mais": "Aumentar o volume.",
+            "volume_menos": "Diminuir o volume.",
+            "volume_mudo": "Mutar/desmutar o som.",
+            "abrir_youtube": "Abrir o site do YouTube.",
+            "abrir_gmail": "Abrir o Gmail.",
+            "abrir_whatsapp": "Abrir o WhatsApp Web.",
+            "abrir_github": "Abrir o GitHub.",
+            "ditado": "Texto comum para digitar, nao e comando.",
+        }}}
+    try:
+        r = requests.post(JEV_URL,
+                          headers={"Authorization": "Bearer " + chave,
+                                   "Content-Type": "application/json"},
+                          json={"model": _env_modelo(),
+                                "state": {"frase": frase},
+                                "questions": pergunta},
+                          timeout=timeout)
+    except requests.RequestException:
+        return None
+    if r.status_code != 200:
+        return None
+    try:
+        js = r.json()
+        a = js["answers"]["intencao"]
+        if a.get("type") != "choice":
+            return None
+        cmd, conf = a.get("choice"), a.get("confidence", 0.0)
+        if cmd not in COMANDOS or not isinstance(conf, (int, float)):
+            return None
+        return (cmd, float(conf), (js.get("usage") or {}).get("cost"))
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None

@@ -3,6 +3,8 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import unittest
+from unittest import mock
+import requests
 import comandos
 
 
@@ -61,6 +63,51 @@ class TestExecutar(unittest.TestCase):
     def test_comando_invalido_levanta(self):
         with self.assertRaises(ValueError):
             comandos.executar("abrir_banco")
+
+
+class TestDecidir(unittest.TestCase):
+    def _resp(self, answers, cost=0.00001, status=200):
+        r = mock.Mock(status_code=status)
+        r.json.return_value = {"answers": answers, "usage": {"cost": cost}}
+        return r
+
+    def test_comando_com_confianca(self):
+        ans = {"intencao": {"type": "choice", "choice": "abrir_youtube",
+                            "confidence": 0.9}}
+        with mock.patch("requests.post", return_value=self._resp(ans)) as p:
+            out = comandos.decidir("abrir o youtube", "k")
+        self.assertEqual(out, ("abrir_youtube", 0.9, 0.00001))
+        corpo = p.call_args.kwargs["json"]
+        self.assertEqual(corpo["model"], "typesafe/jev-1.13")
+        self.assertIn("ditado", corpo["questions"]["intencao"]["criteria"])
+
+    def test_rede_fora_devolve_none(self):
+        with mock.patch("requests.post", side_effect=requests.RequestException("dns")):
+            self.assertIsNone(comandos.decidir("x", "k"))
+
+    def test_401_devolve_none(self):
+        r = mock.Mock(status_code=401)
+        r.text = "User not found."
+        with mock.patch("requests.post", return_value=r):
+            self.assertIsNone(comandos.decidir("x", "k"))
+
+    def test_schema_estranho_devolve_none(self):
+        r = mock.Mock(status_code=200)
+        r.json.return_value = {"ops": 1}
+        with mock.patch("requests.post", return_value=r):
+            self.assertIsNone(comandos.decidir("x", "k"))
+
+    def test_opcao_fora_da_lista_devolve_none(self):
+        ans = {"intencao": {"type": "choice", "choice": "formatar_pc", "confidence": 1.0}}
+        with mock.patch("requests.post", return_value=self._resp(ans)):
+            self.assertIsNone(comandos.decidir("x", "k"))
+
+    def test_limiar_padrao_e_env(self):
+        self.assertAlmostEqual(comandos.limiar(), 0.6)
+        with mock.patch.dict("os.environ", {"COMANDO_CONFIANCA": "0.85"}):
+            self.assertAlmostEqual(comandos.limiar(), 0.85)
+        with mock.patch.dict("os.environ", {"COMANDO_CONFIANCA": "banana"}):
+            self.assertAlmostEqual(comandos.limiar(), 0.6)
 
 
 if __name__ == "__main__":
