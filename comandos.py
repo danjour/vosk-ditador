@@ -147,3 +147,33 @@ def decidir(frase, chave, timeout=20):
         return (cmd, float(conf), (js.get("usage") or {}).get("cost"))
     except (ValueError, KeyError, TypeError, AttributeError):
         return None
+
+
+def wake():
+    """Palavra de ativação (env COMANDO_WAKE, padrão 'computador')."""
+    w = os.environ.get("COMANDO_WAKE", WAKE_PADRAO).strip()
+    return w or WAKE_PADRAO
+
+
+def tratar(texto):
+    """Cascata wake → local → JEV. (True, status) executou;
+    (False, texto) segue p/ ditado (wake removido se havia)."""
+    resto = tira_wake(texto, wake())
+    if resto is None:
+        return (False, texto)
+    cmd, custo = match_local(resto), None
+    if cmd is None:
+        chave = os.environ.get("OPENROUTER_API_KEY", "").strip()
+        if chave:
+            r = decidir(resto, chave)
+            if r and r[0] != "ditado" and r[1] >= limiar():
+                cmd, custo = r[0], r[2]
+    if cmd is None or cmd == "ditado":
+        return (False, resto)
+    try:
+        msg = executar(cmd)
+    except ValueError:
+        return (False, resto)
+    if custo is not None:
+        msg += f" (custo ${custo:.5f})"
+    return (True, msg)

@@ -43,21 +43,15 @@ class TestMatchLocal(unittest.TestCase):
 class TestExecutar(unittest.TestCase):
     def test_midia_chama_keyboard(self):
         chamadas = []
-        comandos._teclado = lambda k: chamadas.append(k)
-        try:
+        with mock.patch.object(comandos, "_teclado", lambda k: chamadas.append(k)):
             msg = comandos.executar("pausar_musica")
-        finally:
-            del comandos._teclado
         self.assertEqual(chamadas, ["play/pause media"])
         self.assertIn("paus", msg.lower())
 
     def test_abrir_youtube(self):
         abertas = []
-        comandos._abrir_url = lambda u: abertas.append(u)
-        try:
+        with mock.patch.object(comandos, "_abrir_url", lambda u: abertas.append(u)):
             comandos.executar("abrir_youtube")
-        finally:
-            del comandos._abrir_url
         self.assertEqual(abertas, ["https://www.youtube.com"])
 
     def test_comando_invalido_levanta(self):
@@ -108,6 +102,50 @@ class TestDecidir(unittest.TestCase):
             self.assertAlmostEqual(comandos.limiar(), 0.85)
         with mock.patch.dict("os.environ", {"COMANDO_CONFIANCA": "banana"}):
             self.assertAlmostEqual(comandos.limiar(), 0.6)
+
+
+class TestTratar(unittest.TestCase):
+    def test_local_executa_sem_rede(self):
+        with mock.patch("requests.post") as p:
+            ok, msg = comandos.tratar("Computador, pausar música.")
+        p.assert_not_called()
+        self.assertTrue(ok)
+        self.assertIn("paus", msg.lower())
+
+    def test_jev_executa_abrir(self):
+        ans = {"intencao": {"type": "choice", "choice": "abrir_youtube", "confidence": 0.9}}
+        r = mock.Mock(status_code=200)
+        r.json.return_value = {"answers": ans, "usage": {"cost": 0.00001}}
+        with mock.patch("requests.post", return_value=r):
+            with mock.patch.dict("os.environ", {"OPENROUTER_API_KEY": "k"}):
+                ok, msg = comandos.tratar("Computador, abre o youtube.")
+        self.assertTrue(ok)
+        self.assertIn("Youtube", msg)
+        self.assertIn("custo", msg)
+
+    def test_confianca_baixa_vira_ditado(self):
+        ans = {"intencao": {"type": "choice", "choice": "abrir_youtube", "confidence": 0.4}}
+        r = mock.Mock(status_code=200)
+        r.json.return_value = {"answers": ans, "usage": {"cost": 0.0}}
+        with mock.patch("requests.post", return_value=r):
+            with mock.patch.dict("os.environ", {"OPENROUTER_API_KEY": "k"}):
+                ok, texto = comandos.tratar("Computador, abre o youtube.")
+        self.assertFalse(ok)
+        self.assertNotIn("omputador", texto.lower())
+
+    def test_sem_wake_nem_toca(self):
+        with mock.patch("requests.post") as p:
+            ok, texto = comandos.tratar("preciso comprar pão.")
+        p.assert_not_called()
+        self.assertEqual((ok, texto), (False, "preciso comprar pão."))
+
+    def test_sem_key_cai_pra_ditado(self):
+        env = {k: v for k, v in os.environ.items() if k != "OPENROUTER_API_KEY"}
+        with mock.patch.dict("os.environ", env, clear=True):
+            with mock.patch("requests.post") as p:
+                ok, texto = comandos.tratar("Computador, que horas são?")
+        p.assert_not_called()
+        self.assertEqual((ok, texto), (False, "que horas são?"))
 
 
 if __name__ == "__main__":
