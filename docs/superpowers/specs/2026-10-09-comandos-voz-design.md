@@ -77,3 +77,26 @@ Relaxar a trava de título da colagem; confirmação falada; parâmetros livres
 ("volume 30", "abre X" fora do mapa); encadear comandos; 9router como
 transporte (fala só chat-completions; o OpenRouter recusa JEV nesse
 protocolo — verificado ao vivo em 2026-10-09).
+
+## v2 (aprovado 2026-10-09)
+
+- **tocar_musica**: sem API key — `yt-dlp "ytsearch1:X" --flat-playlist
+  --print id` resolve busca→ID; `mpv --no-video --idle` com IPC
+  (`--input-ipc-server`) toca em segundo plano e vira fila
+  (`loadfile ... append-play`). Falha na extração → abre a página de busca
+  no navegador (fail-open). Latência esperada ~3-6s.
+- **Ponte de pause**: com o demônio mpv vivo, pausar/continuar/próxima/
+  anterior roteiam para o IPC (`cycle pause`, `playlist-next/prev`); sem
+  ele, media keys como hoje. "Toca X" e depois "pausar música" funciona.
+- **Respostas faladas**: Edge-TTS (`pt-BR-AntonioNeural`, já instalado) +
+  `playsound` (1 dep nova) em thread daemon; fala o status de cada comando
+  e as respostas; `COMANDO_VOZ=0` desliga. SAPI descartado (só vozes EN).
+- **abrir_programa**: mapa nome→executável + `os.startfile`
+  (notepad/calc/mspaint); miss → ditado.
+- **dizer_horas** (hora local, fala+status) e **pesquisar_web** (resto →
+  busca Google).
+- JEV: +4 opções (`tocar_musica`, `abrir_programa`, `dizer_horas`,
+  `pesquisar_web`); limiar 0.6 mantido; query/parâmetro sai do resto por
+  regex, nunca do JEV (JEV não extrai entidades).
+- Fora do v2: Apple Music/Spotify (sem API prática no Windows sem conta
+  de dev paga/OAuth); YouTube Data API dispensada (yt-dlp keyless).
