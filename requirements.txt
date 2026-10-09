@@ -1,14 +1,16 @@
-vosk           # só p/ vosk_live.py (teste de console); o ditador usa faster-whisper
-sounddevice
-keyboard
-pillow
-faster-whisper
-nvidia-cublas-cu12
-nvidia-cudnn-cu12
+# Básico: ditador (vosk_global.py) + modo reunião (reuniao.py). Instale só isto:
+#   pip install -r requirements.txt
+# Opcionais ficam em requirements-diarizacao.txt (--diarizar) e requirements-vosk.txt (legado).
+faster-whisper  # transcrição local (ditador: medium; reunião: large-v3-turbo)
+sounddevice     # captura do microfone
+keyboard        # hotkeys globais (Ctrl+Alt+E/R/W)
+pystray         # bandeja com iniciar/pausar, microfone e recuperação
+pillow          # ícone da bandeja e desenho do orbe
+python-dotenv   # chaves/config no .env (veja .env.example)
 numpy
-requests
-soundfile      # le/grava FLAC do modo reunião
-soxr           # resample (mic 44.1k/16k de BT -> 48k do FLAC)
-PyAudioWPatch  # loopback WASAPI do áudio do sistema (reuniao.py)
-python-dotenv  # chaves/config no .env (veja .env.example)
-pyannote.audio==4.0.7  # só p/ --diarizar; antes dela: pip install torch==2.14.1 torchvision==0.29.1 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cu130 (torch do PyPI não tem kernel da RTX 5050)
+soundfile       # le/grava FLAC do modo reunião
+soxr            # resample (mic 44.1k/16k de BT -> 48k do FLAC)
+PyAudioWPatch   # loopback WASAPI do áudio do sistema (reuniao.py)
+requests        # resumo da ata + --groq
+edge-tts        # voz das respostas dos comandos (pt-BR-AntonioNeural)
+playsound       # toca o mp3 da resposta (falar roda em thread)

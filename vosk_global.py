@@ -134,6 +134,7 @@ def _app():
                     orb.flash()
                     estado["ultimo"] = valor
                     print("##", saida, flush=True)
+                    comandos.falar(saida)
                 elif entrega.deliver(saida):
                     entrega.set_target()  # logo após cada colagem bem-sucedida
                     estado["ultimo"] = valor

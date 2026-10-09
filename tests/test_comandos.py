@@ -225,5 +225,27 @@ class TestTocar(unittest.TestCase):
         self.assertEqual(comandos.match_local("quero ouvir queen"), "tocar_musica")
 
 
+class TestFalar(unittest.TestCase):
+    def test_flag_desligada_nao_sintetiza(self):
+        with mock.patch.dict("os.environ", {"COMANDO_VOZ": "0"}):
+            with mock.patch.object(comandos, "_sintetizar") as s:
+                comandos.falar("oi")
+                s.assert_not_called()
+
+    def test_falar_chama_sintese_e_toca(self):
+        with mock.patch.dict("os.environ", {"COMANDO_VOZ": "1"}):
+            with mock.patch.object(comandos, "_sintetizar", return_value="f.mp3") as s:
+                with mock.patch.object(comandos, "_tocar_arquivo") as t:
+                    with mock.patch("os.remove") as rm:
+                        comandos._falar_sync("São 14h30.")
+        s.assert_called_once_with("São 14h30.")
+        t.assert_called_once_with("f.mp3")
+        rm.assert_called_once()
+
+    def test_sintese_falhando_nao_levanta(self):
+        with mock.patch.object(comandos, "_sintetizar", side_effect=RuntimeError("rede")):
+            comandos._falar_sync("oi")  # sem exceção = passou
+
+
 if __name__ == "__main__":
     unittest.main()

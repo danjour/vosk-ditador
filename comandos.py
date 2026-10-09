@@ -288,3 +288,45 @@ def tratar(texto):
     if custo is not None:
         msg += f" (custo ${custo:.5f})"
     return (True, msg)
+
+
+def _voz_ativa():
+    return os.environ.get("COMANDO_VOZ", "1").strip() not in ("0", "não", "nao", "off", "false")
+
+
+def _sintetizar(texto):
+    """mp3 temporário com Edge-TTS pt-BR; exceção escapa p/ _falar_sync."""
+    import asyncio
+    import edge_tts
+    import tempfile
+    fd, path = tempfile.mkstemp(suffix=".mp3", prefix="ditador_")
+    os.close(fd)
+    asyncio.run(edge_tts.Communicate(texto, voice="pt-BR-AntonioNeural").save(path))
+    return path
+
+
+def _tocar_arquivo(path):
+    import playsound
+    playsound.playsound(path, block=True)
+
+
+def _falar_sync(texto):
+    try:
+        path = _sintetizar(texto)
+        try:
+            _tocar_arquivo(path)
+        finally:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+    except Exception:
+        pass  # voz nunca quebra o fluxo
+
+
+def falar(texto):
+    """Fala o status em thread daemon (nunca bloqueia a bandeja)."""
+    if not texto or not _voz_ativa():
+        return
+    import threading
+    threading.Thread(target=_falar_sync, args=(texto,), daemon=True).start()
